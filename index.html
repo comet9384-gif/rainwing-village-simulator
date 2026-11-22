@@ -76,11 +76,13 @@
   button:disabled{background:#9db8a6; opacity:.7;}
   button.alt{background:var(--papaia);}
   button.sun{background:var(--sun-gold); color:var(--ink);}
+  button.danger{background:#c94f3d;}
   ul.log{list-style:none; font-size:.8rem; max-height:110px; overflow:auto; padding:0; margin-top:6px;}
   ul.log li{padding:2px 0; border-bottom:1px dashed rgba(18,51,36,.2);}
   .daybar{height:14px; border-radius:8px; margin-top:6px; border:2px solid var(--canopy);
     background:linear-gradient(90deg,#0b3d2e 0,#1f7a4d 40%,#f7b32b 70%,#9fe3e0 90%);}
   .daybar .marker{height:100%; width:4px; background:#fff; border-radius:2px; transition:margin-left 1s linear;}
+  .saveship{font-size:.75rem; opacity:.65; text-align:center; margin-top:6px;}
   .toast{
     position:fixed; bottom:14px; left:50%; transform:translateX(-50%);
     background:var(--canopy); color:#fff; padding:8px 16px; border-radius:20px;
@@ -122,6 +124,8 @@
     <button id="buildHut">🛖 Хижина (10 🥭)</button>
     <button id="hatch" class="alt">🥚 Вылупить дракончика (20 🥭 + 5 🐚)</button>
     <button id="vanish" class="sun">✨ Камуфляж-минутка (бесплатно)</button>
+    <button id="reset" class="danger">🔄 Новая долина</button>
+    <div class="saveship" id="saveship">💾 Прогресс сохраняется автоматически в твоём браузере</div>
     <div class="daybar"><div class="marker" id="daymarker"></div></div>
   </div>
 
@@ -132,7 +136,26 @@
 </main>
 <div class="toast" id="toast"></div>
 <script>
-const S={fruit:5, shells:0, morale:50, pop:1, huts:0, hidden:false, dayT:0};
+const SAVE_KEY='rainwing-village-simulator-v1';
+const DEFAULTS={fruit:5, shells:0, morale:50, pop:1, huts:0};
+let S=Object.assign({}, DEFAULTS);
+let hidden=false, dayT=0;
+
+function save(){
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+    document.getElementById('saveship').textContent='💾 Сохранено: '+new Date().toLocaleTimeString();
+  }catch(e){ console.warn('save failed', e); }
+}
+function load(){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(raw){ const got=JSON.parse(raw);
+      if(got && typeof got.fruit==='number'){ S=Object.assign({}, DEFAULTS, got); return true; }
+    }
+  }catch(e){ console.warn('load failed', e); }
+  return false;
+}
+
 const $=id=>document.getElementById(id);
 function toast(t){const el=$('toast'); el.textContent=t; el.classList.add('show');
   clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1600);}
@@ -149,20 +172,21 @@ function render(){
   $('buildHut').disabled = S.fruit<10;
 }
 function addFruit(n){S.fruit+=n; if(S.fruit>999)S.fruit=999; render();}
-$('sunbtn').addEventListener('click',()=>{addFruit(2); toast('☀️ Солнечные ванны! +2 фруктов');});
+
+$('sunbtn').addEventListener('click',()=>{addFruit(2); save(); toast('☀️ Солнечные ванны! +2 фруктов');});
 $('bigdragon').addEventListener('click',()=>{
-  if(S.hidden){S.hidden=false; document.querySelector('.bigDragon').style.opacity=1;
+  if(hidden){hidden=false; document.querySelector('.bigDragon').style.opacity=1;
     toast('Дракон проявился!'); return;}
-  S.shells+=1; render(); toast('✨ +1 краска! Камуфляжная ловкость и тренировка.');
+  S.shells+=1; render(); save(); toast('✨ +1 краска! Камуфляжная ловкость и тренировка.');
 });
 $('vanish').addEventListener('click',()=>{
-  S.hidden=true; const d=document.querySelector('.bigDragon'); d.style.opacity=0.15;
-  S.morale=Math.min(100,S.morale+8); render(); toast('🐉 Kamuflyazh-minute! Настроение чуть подросло.');
-  setTimeout(()=>{S.hidden=false; d.style.opacity=1; render();},60*1000);
+  hidden=true; const d=document.querySelector('.bigDragon'); d.style.opacity=0.15;
+  S.morale=Math.min(100,S.morale+8); render(); save(); toast('🐉 Kamuflyazh-minute! Настроение чуть подросло.');
+  setTimeout(()=>{hidden=false; d.style.opacity=1; render();},60*1000);
 });
 $('buildHut').addEventListener('click',()=>{
   if(S.fruit<10) return;
-  S.fruit-=10; S.huts++; render(); log('🛖 Построена хижина №'+S.huts+'. Дракончики успокоились.');
+  S.fruit-=10; S.huts++; render(); save(); log('🛖 Построена хижина №'+S.huts+'. Дракончики успокоились.');
   toast('Хижина построена!');
 });
 $('hatch').addEventListener('click',()=>{
@@ -170,8 +194,16 @@ $('hatch').addEventListener('click',()=>{
   S.fruit-=20; S.shells-=5; S.pop++;
   S.morale=Math.min(100,S.morale+5);
   const berries=['🍀','🌟','🥭','🌴']; log('🥚 из яйца ('+(berries[Math.floor(Math.random()*4)]||'')+'). Вылупился дракончик №'+S.pop+'!');
-  render(); toast('🐣 Новый дракончик!');
+  render(); save(); toast('🐣 Новый дракончик!');
 });
+$('reset').addEventListener('click',()=>{
+  if(!confirm('Начать новую долину? Весь прогресс исчезнет (как туман утром).')) return;
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  S=Object.assign({}, DEFAULTS); render(); save();
+  $('log').innerHTML=''; log('🌱 Новая долина! Солнце снова высоко.');
+  toast('🌱 Долина начата заново');
+});
+
 function gatheringTick(){
   if(S.pop>0){
     addFruit(S.pop);
@@ -180,14 +212,19 @@ function gatheringTick(){
 }
 setInterval(gatheringTick,3000);
 function tick(){
-  S.dayT=(S.dayT+0.8)%100;
-  $('daymarker').style.marginLeft=Math.round(S.dayT)+'%';
-  if(S.dayT>85 && S.morale>10) S.morale-=1;
+  dayT=(dayT+0.8)%100;
+  $('daymarker').style.marginLeft=Math.round(dayT)+'%';
+  if(dayT>85 && S.morale>10) S.morale-=1;
   render();
 }
 setInterval(tick,1000);
+setInterval(save,5000);
+window.addEventListener('beforeunload', save);
+
+const loaded=load();
 render();
-log('🌱 Доброе утро! Долина цветёт, нектар, фрукты и сладкие фантазии ждут.');
+log(loaded ? '🌅 Долина проснулась — прогресс найден в localStorage. Добро пожаловать домой!'
+           : '🌱 Доброе утро! Долина цветёт, нектар, фрукты и сладкие фантазии ждут.');
 </script>
 </body>
 </html>
