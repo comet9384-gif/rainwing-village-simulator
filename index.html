@@ -124,6 +124,7 @@
     <button id="buildHut">🛖 Хижина (10 🥭)</button>
     <button id="hatch" class="alt">🥚 Вылупить дракончика (20 🥭 + 5 🐚)</button>
     <button id="vanish" class="sun">✨ Камуфляж-минутка (бесплатно)</button>
+    <button id="fair" class="sun">🎪 Мини-ярмарка фруктов (30 🥭)</button>
     <button id="reset" class="danger">🔄 Новая долина</button>
     <div class="saveship" id="saveship">💾 Прогресс сохраняется автоматически в твоём браузере</div>
     <div class="daybar"><div class="marker" id="daymarker"></div></div>
@@ -170,6 +171,7 @@ function render(){
   for(let i=0;i<S.huts;i++){const h=document.createElement('div'); h.className='hut'+(i%2?' hutsleep':''); v.appendChild(h);}
   $('hatch').disabled = S.fruit<20 || S.shells<5;
   $('buildHut').disabled = S.fruit<10;
+  $('fair').disabled = S.fruit<30 || fairActive;
 }
 function addFruit(n){S.fruit+=n; if(S.fruit>999)S.fruit=999; render();}
 
@@ -203,6 +205,65 @@ $('reset').addEventListener('click',()=>{
   $('log').innerHTML=''; log('🌱 Новая долина! Солнце снова высоко.');
   toast('🌱 Долина начата заново');
 });
+
+// ===== Мини-ярмарка фруктов =====
+let fairActive=false, fairScore=0, fairTime=0, fairTid=null, fairSpid=null, fairBest=+(localStorage.getItem('fairBest')||0);
+
+$('fair').addEventListener('click',()=>{
+  if(fairActive || S.fruit<30) return;
+  S.fruit-=30; render(); save();
+  startFair();
+});
+
+function startFair(){
+  fairActive=true; fairScore=0; fairTime=20;
+  const stage=$('stage');
+  const ov=document.createElement('div');
+  ov.id='fairOv';
+  ov.style.cssText='position:absolute;inset:0;background:rgba(11,61,46,.82);z-index:15;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:Nunito,sans-serif;';
+  ov.innerHTML='<div style="font-size:1.6rem;font-weight:700">🎪 Ярмарка фруктов!</div>'
+    +'<div id="fairTimer" style="font-size:2.2rem;font-weight:700;color:var(--sun-gold)">20</div>'
+    +'<div id="fairScore" style="font-size:1.1rem;margin:6px 0 12px">Поймано: 0 🥭</div>'
+    +'<div id="fairArena" style="position:relative;width:100%;height:220px"></div>'
+    +'<div style="font-size:.8rem;opacity:.8;margin-top:6px">Тыкай на падающие фрукты!</div>';
+  stage.appendChild(ov);
+  const arena=ov.querySelector('#fairArena');
+  arena.addEventListener('click',e=>{
+    if(e.target.classList.contains('fairFruit')){
+      fairScore++;
+      e.target.remove();
+      ov.querySelector('#fairScore').textContent='Поймано: '+fairScore+' 🥭';
+    }
+  });
+  fairSpid=setInterval(()=>{
+    const f=document.createElement('div');
+    f.className='fairFruit';
+    f.textContent=['🥭','🍎','🍍','🍑','🥝'][Math.floor(Math.random()*5)];
+    f.style.cssText='position:absolute;font-size:26px;cursor:pointer;left:'+(Math.random()*85+2)+'%;top:-30px;transition:top 2.2s linear;';
+    arena.appendChild(f);
+    requestAnimationFrame(()=>{ f.style.top='230px'; });
+    setTimeout(()=>f.remove(),2400);
+  },700);
+  fairTid=setInterval(()=>{
+    fairTime--;
+    ov.querySelector('#fairTimer').textContent=fairTime;
+    if(fairTime<=0) endFair();
+  },1000);
+}
+
+function endFair(){
+  clearInterval(fairTid); clearInterval(fairSpid);
+  const ov=$('fairOv'); if(ov) ov.remove();
+  fairActive=false;
+  const earned=fairScore*2;
+  S.fruit=Math.min(999,S.fruit+earned);
+  S.morale=Math.min(100,S.morale+Math.min(10,fairScore));
+  let rec='';
+  if(fairScore>fairBest){ fairBest=fairScore; try{localStorage.setItem('fairBest',fairBest);}catch(e){} rec=' 🏆 Новый рекорд!'; }
+  log('🎪 Ярмарка окончена: поймано '+fairScore+' фруктов, выручка +'+earned+' 🥭.'+rec);
+  render(); save();
+  toast('🎪 Выручка: +'+earned+' фруктов!'+rec);
+}
 
 function gatheringTick(){
   if(S.pop>0){
